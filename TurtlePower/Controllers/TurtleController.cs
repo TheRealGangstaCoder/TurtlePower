@@ -1,10 +1,10 @@
 ﻿using System;
 using System.Linq;
 using System.Net.Http;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
 using Turtle.Services;
-using Microsoft.AspNetCore.Http;
 
 namespace Turtle.Controllers
 {
@@ -56,10 +56,14 @@ namespace Turtle.Controllers
             }
             var nextHop = turtle.NextHopUri ?? turtle.DestinationUri;
 
+            // proxy request
             var upstreamRequest = ProxyService.CreateProxyHttpRequest(HttpContext.Request, nextHop);
             var proxy = new ProxyService(HttpContext, upstreamRequest, httpClient);
 
-            return proxy.Send().Result;
+            var result = proxy.Send().Result;
+
+            return new ObjectResult(result.Content.ReadAsStringAsync().Result) { StatusCode = (int)result.StatusCode };
+
         }
 
         private void ProcessXForwardedForHeaders()

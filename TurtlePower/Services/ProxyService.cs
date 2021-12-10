@@ -49,7 +49,7 @@ namespace Turtle.Services
             }
         }
 
-        public static HttpRequestMessage CreateProxyHttpRequest(HttpRequest request, Uri ProxyTo)
+        public static HttpRequestMessage CreateProxyHttpRequest(HttpRequest request, Uri proxyTo)
         {
             var requestMessage = new HttpRequestMessage();
             if (request.ContentLength > 0 || request.Headers.ContainsKey("Transfer-Encoding"))
@@ -84,15 +84,15 @@ namespace Turtle.Services
                         requestMessage.Content?.Headers.TryAddWithoutValidation(headerName, headerValues);
                     }
                 }
-                if (headerName == "destination")
-                {
-                    requestMessage.Content?.Headers.Add(headerName, value.ToString());
-                }
+                //if (headerName == "destination")
+                //{
+                //    requestMessage.Content?.Headers.Add(headerName, value.ToString());
+                //}
             }
             requestMessage.Method = new HttpMethod(request.Method);
 
-            requestMessage.RequestUri = ProxyTo;
-            requestMessage.Headers.Host = ProxyTo.Host;
+            requestMessage.RequestUri = proxyTo;
+            requestMessage.Headers.Host = proxyTo.Host;
 
             return requestMessage;
         }
