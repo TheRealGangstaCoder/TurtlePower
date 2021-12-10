@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace Turtle
 {
@@ -9,14 +10,8 @@ namespace Turtle
 
     public class Turtle
     {
-        public string Uri { get; set; }
-        public NextHop NextHop { get; set; }
-    }
+        public Uri DestinationUri { get; set; }
 
-    public enum NextHop
-    { 
-        Turtle = 0,
-        Destination =1
+        public Uri NextHopUri { get; set; }
     }
-
 }

@@ -1,8 +1,10 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.Linq;
+using System.Net.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Turtle.Services;
+using Microsoft.AspNetCore.Http;
 
 namespace Turtle.Controllers
 {
@@ -12,104 +14,67 @@ namespace Turtle.Controllers
     {
 
         private readonly ILogger<TurtleController> _logger;
+        private readonly HttpClient httpClient;
+
         TurtlesConfiguration _config { get; }
 
-        public TurtleController(ILogger<TurtleController> logger, TurtlesConfiguration config)
+        public TurtleController(ILogger<TurtleController> logger, TurtlesConfiguration config, IHttpClientFactory clientFactory)
         {
             _logger = logger;
             _config = config;
+            httpClient = clientFactory.CreateClient("HttpClientWithSSLUntrusted");
         }
 
         public dynamic Any()
         {
-
-            var headers = new Dictionary<string, string>(StringComparer.InvariantCultureIgnoreCase);
-            var serverIp = HttpContext.Connection.RemoteIpAddress;
-            NextHop nextHop = NextHop.Turtle; // assume we are the first turtle
-
-            foreach (var header in HttpContext.Request.Headers)
+            ProcessXForwardedForHeaders();
+            
+            // determine next hop
+            Turtle turtle;
+            if (HttpContext.Request.Headers.ContainsKey("destination"))
             {
-                headers.Add(header.Key, header.Value);
-            }
-
-            // good netizen stuff
-            if (headers.ContainsKey("x-forwarded-for"))
-            {
-                headers["X-Forwarded-For"] = ";" + serverIp.ToString();
-            }
-            else
-            {
-                headers.Add("X-Forwarded-For", serverIp.ToString());
-            }
-
-
-
-            // compare with config to determine next hop
-
-            if (headers.ContainsKey("destination"))
-            {
-                var destination = new Uri(headers["destination"]);
+                var destination = new Uri(HttpContext.Request.Headers["destination"]);
                 string path = destination.GetLeftPart(UriPartial.Path);
 
-                var turtle = _config.Turtle.Where(x => x.Uri.ToLower() == path.ToLower()).SingleOrDefault();
+                try
+                {
+                    turtle = _config.Turtle.Where(x => path.ToLower().StartsWith(x.DestinationUri.GetLeftPart(UriPartial.Path))).SingleOrDefault();
+                }
+                catch
+                {
+                    return StatusCode(500, "more than 1 hop configuration found for " + destination);
+                }
 
                 if (turtle is null)
                 {
                     return NotFound("Turtle cannot doesn't know where to go, update configuration for " + destination);
                 }
-
-                nextHop = turtle.NextHop;
-
             }
             else
             {
-                    return NotFound("Turtle cannot doesn't know where to go, no destination passed in the header");
+                return NotFound("Turtle cannot doesn't know where to go, no destination passed in the header");
             }
+            var nextHop = turtle.NextHopUri ?? turtle.DestinationUri;
 
+            var upstreamRequest = ProxyService.CreateProxyHttpRequest(HttpContext.Request, nextHop);
+            var proxy = new ProxyService(HttpContext, upstreamRequest, httpClient);
 
-            // now we are in business
+            return proxy.Send().Result;
+        }
 
-            var queryString = HttpContext.Request.QueryString;
-            var method = HttpContext.Request.Method;
-            var body = method.ToLower() != "get" ? HttpContext.Request.Body : null;
-            var host = HttpContext.Request.Host.Host; // dont need the port here
-            var contentType = HttpContext.Request.ContentType;
-            var cookies = HttpContext.Request.Cookies; // only for the same of completeness, it would be a crazy world if api are sending cookies
+        private void ProcessXForwardedForHeaders()
+        {
+            var serverIp = HttpContext.Connection.RemoteIpAddress;
 
-
-            var isTurtle = headers.ContainsKey("turtle");
-
-
-            if (nextHop == NextHop.Turtle && !isTurtle)
+            // good netizen stuff
+            if (HttpContext.Request.Headers.ContainsKey("x-forwarded-for"))
             {
-                // this is the first turtle, and we dont have a shell
-
-                // lets make a shell
-            }
-            else if (nextHop == NextHop.Turtle && isTurtle)
-            {
-                // we have a shell, and we are turtle!
-                // send the shell downstream
-            }
-            if (nextHop == NextHop.Destination && isTurtle)
-            {
-                // unpack shell and send downstream
+                HttpContext.Request.Headers["X-Forwarded-For"] = ";" + serverIp.ToString();
             }
             else
             {
-                // this is the first turtle, and next hop is destination, and we dont have a shell
-                // just send downstream
+                HttpContext.Request.Headers.Add("X-Forwarded-For", serverIp.ToString());
             }
-
-
-            // add headers and body to Shell
-            // update x-forwarded-for
-            // send to next hop
-
-
-            // parse response and send upstream
-
-            return "response " + DateTime.Now.ToString();
         }
     }
 }
