@@ -38,7 +38,7 @@ namespace Turtle.Controllers
 
                 try
                 {
-                    turtle = _config.Turtle.Where(x => path.ToLower().StartsWith(x.DestinationUri.GetLeftPart(UriPartial.Path))).SingleOrDefault();
+                    turtle = _config.Turtle.Where(x => x.DestinationUri.GetLeftPart(UriPartial.Path).ToLower().StartsWith(path.ToLower())).SingleOrDefault();
                 }
                 catch
                 {
